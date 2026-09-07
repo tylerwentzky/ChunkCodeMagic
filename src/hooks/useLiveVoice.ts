@@ -78,8 +78,10 @@ export function useLiveVoice() {
       setOutputLevel(0);
       try {
         const settings = getSettings();
-      await startLiveVoice({
+        await startLiveVoice({
           ...options,
+          micMode: options.micMode ?? settings.liveVoiceMicMode ?? 'hold',
+          vadSensitivity: options.vadSensitivity ?? settings.liveVoiceVadSensitivity ?? 'medium',
           micDeviceId: options.micDeviceId ?? settings.liveVoiceMicDeviceId ?? '',
           outputDeviceId: options.outputDeviceId ?? settings.liveVoiceOutputDeviceId ?? '',
           outputVolume: options.outputVolume ?? settings.liveVoiceOutputVolume ?? 1,
@@ -160,6 +162,8 @@ export function useLiveVoice() {
 
   const setMicMode = useCallback((mode: LiveVoiceMicMode) => {
     setLiveVoiceMicMode(mode);
+    const settings = getSettings();
+    saveSettings({ ...settings, liveVoiceMicMode: mode });
   }, []);
 
   const setOutputDevice = useCallback((deviceId: string) => {

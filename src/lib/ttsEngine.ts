@@ -127,7 +127,7 @@ export function cleanTextForSpeech(text: string): string {
     .replace(/<\/?[a-zA-Z][^>]*>/gi, '')
     .replace(/```[\s\S]*?```/g, '')
     .replace(/`([^`]+)`/g, '$1')
-    .replace(/(?:^|\n)>\s*/g, '$1')
+    .replace(/^>\s*/gm, '')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .replace(/[*_~`#]/g, '')
     .replace(/^["'“‘«\s]+|["'”’»\s]+$/g, '')
@@ -149,12 +149,30 @@ export function splitIntoSpeechSegments(text: string, maxSegmentLen: number = 35
     return [clean];
   }
 
-  // Split only oversized stories by paragraph boundaries
+  // Split oversized stories by paragraph boundaries
   const rawParagraphs = clean.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
   const segments: string[] = [];
   let currentChunk = '';
 
   for (const para of rawParagraphs) {
+    // If a single paragraph is longer than maxSegmentLen, split it by sentence boundaries
+    if (para.length > maxSegmentLen) {
+      if (currentChunk) {
+        segments.push(currentChunk);
+        currentChunk = '';
+      }
+      const sentences = para.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g) || [para];
+      for (const sentence of sentences) {
+        if ((currentChunk + ' ' + sentence).trim().length <= maxSegmentLen) {
+          currentChunk = currentChunk ? `${currentChunk} ${sentence}` : sentence;
+        } else {
+          if (currentChunk) segments.push(currentChunk);
+          currentChunk = sentence;
+        }
+      }
+      continue;
+    }
+
     if ((currentChunk + '\n\n' + para).trim().length <= maxSegmentLen) {
       currentChunk = currentChunk ? `${currentChunk}\n\n${para}` : para;
     } else {
@@ -176,7 +194,11 @@ let audioCtx: AudioContext | null = null;
 export function getAudioContext(): AudioContext {
   if (!audioCtx || audioCtx.state === 'closed') {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    audioCtx = new AudioContextClass({ sampleRate: SAMPLE_RATE });
+    try {
+      audioCtx = new AudioContextClass();
+    } catch {
+      audioCtx = new AudioContextClass({ sampleRate: SAMPLE_RATE });
+    }
   }
   if (audioCtx.state === 'suspended') {
     audioCtx.resume().catch(() => {});
@@ -444,6 +466,7 @@ export async function synthesizeSpeech(
 
 export class TtsEngine {
   private _isSpeaking = false;
+  private _lastUsedEngine: 'gemini' | 'browser' | null = null;
   private currentSource: AudioBufferSourceNode | null = null;
   private cancelFlag = { cancelled: false };
   private _browserTtsTimer: any = null;
@@ -451,6 +474,7 @@ export class TtsEngine {
   onSpeakingChanged?: (speaking: boolean) => void;
 
   get isSpeaking() { return this._isSpeaking; }
+  get lastUsedEngine() { return this._lastUsedEngine; }
 
   private setSpeaking(v: boolean) {
     this._isSpeaking = v;
@@ -537,6 +561,7 @@ export class TtsEngine {
       if (myCancel.cancelled) break;
 
       if (b64) {
+        this._lastUsedEngine = 'gemini';
         const settings = getSettings();
         const speed = settings.ttsSpeed ?? 1.0;
         const volume = settings.liveVoiceOutputVolume ?? 1.0;
@@ -548,6 +573,7 @@ export class TtsEngine {
         });
       } else {
         // Fallback to browser TTS for this segment with proper end-event listening
+        this._lastUsedEngine = 'browser';
         const settings = getSettings();
         const rate = settings.ttsSpeed ?? 1.0;
         await speakWithBrowserAsync(segments[i], options.voiceName, rate);
@@ -595,13 +621,20 @@ export class TtsEngine {
       30000
     )) as string | null;
     if (b64) {
+      this._lastUsedEngine = 'gemini';
       const settings = getSettings();
       const speed = settings.ttsSpeed ?? 1.0;
       const volume = settings.liveVoiceOutputVolume ?? 1.0;
       const pitch = settings.liveVoicePitch ?? 1.0;
-      await this.playBase64(b64, onDone, speed, volume, pitch);
+      await new Promise<void>((resolve) => {
+        this.playBase64(b64, () => {
+          try { onDone?.(); } catch {}
+          resolve();
+        }, speed, volume, pitch);
+      });
     } else {
       // browser fallback using speakWithBrowserAsync to prevent premature cutoff
+      this._lastUsedEngine = 'browser';
       const settings = getSettings();
       const rate = settings.ttsSpeed ?? 1.0;
       this.setSpeaking(true);

@@ -939,12 +939,14 @@ ${summaryBlock}${pinnedBlock}${loreBlock}${scenarioBlock}${recentBlock}${voicePe
         toastSuccess("Turn-by-turn voice armed — tap the mic button to speak.");
       }
     });
+    const currentSettings = getSettings();
     liveVoice.start({
       systemInstruction: buildLiveVoicePrompt(),
-      voiceName: profile.voiceName?.trim() || getSettings().liveVoiceName || 'Kore',
-      temperature: getSettings().liveVoiceTemperature ?? 1.0,
-      preferredModel: getSettings().liveVoiceModel,
-      micMode: 'hold',
+      voiceName: profile.voiceName?.trim() || currentSettings.liveVoiceName || 'Kore',
+      temperature: currentSettings.liveVoiceTemperature ?? 1.0,
+      preferredModel: currentSettings.liveVoiceModel,
+      micMode: currentSettings.liveVoiceMicMode || 'hold',
+      vadSensitivity: currentSettings.liveVoiceVadSensitivity || 'medium',
       contextTurns: messages.slice(-30).map(m => ({ role: m.role, text: m.text })),
     });
   }, [liveVoice, buildLiveVoicePrompt, profile.voiceName, addMessage, messages, toastSuccess]);
@@ -1379,7 +1381,7 @@ ${summaryBlock}${pinnedBlock}${loreBlock}${scenarioBlock}${recentBlock}${voicePe
           <button
             onClick={() => {
               const voiceMode = getSettings().voiceMode || 'live';
-              if (voiceMode === 'voice_chat') {
+              if (voiceMode === 'voice_chat' || voiceMode === 'tts') {
                 setShowVoiceChat(v => !v);
                 if (liveVoice.isActive) liveVoice.stop();
               } else {
@@ -1391,7 +1393,7 @@ ${summaryBlock}${pinnedBlock}${loreBlock}${scenarioBlock}${recentBlock}${voicePe
                 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-lg shadow-emerald-500/10'
                 : 'glass-input text-zinc-300 hover:text-white hover:border-white/20'
             }`}
-            title={getSettings().voiceMode === 'voice_chat' ? 'Voice Chat (STT + TTS)' : 'Live Voice (Real-time Spoken Conversation with Gemini)'}
+            title={getSettings().voiceMode === 'voice_chat' || getSettings().voiceMode === 'tts' ? 'Voice Chat (STT + TTS)' : 'Live Voice (Real-time Spoken Conversation with Gemini)'}
             aria-label="Toggle Voice"
           >
             {liveVoice.isActive || showVoiceChat ? (
@@ -1404,7 +1406,7 @@ ${summaryBlock}${pinnedBlock}${loreBlock}${scenarioBlock}${recentBlock}${voicePe
             ) : (
               <>
                 <Radio className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />
-                <span>{getSettings().voiceMode === 'voice_chat' ? 'VOICE CHAT' : 'LIVE VOICE'}</span>
+                <span>{getSettings().voiceMode === 'voice_chat' || getSettings().voiceMode === 'tts' ? 'VOICE CHAT' : 'LIVE VOICE'}</span>
               </>
             )}
           </button>

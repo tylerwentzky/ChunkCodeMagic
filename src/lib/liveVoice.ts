@@ -124,6 +124,7 @@ export interface LiveVoiceOptions {
   temperature?: number;
   preferredModel?: string;
   micMode?: LiveVoiceMicMode;
+  vadSensitivity?: 'low' | 'medium' | 'high';
   micDeviceId?: string;
   outputDeviceId?: string;
   outputVolume?: number;
@@ -358,18 +359,28 @@ function buildConnectConfig(options: LiveVoiceOptions) {
       },
     },
     // Tune automatic voice detection so the model doesn't interrupt itself.
-    // In toggle / hands-free the mic stays open while the model speaks, and the
-    // model's own voice echoing back triggers the server's VAD as if the user
-    // started talking -> barge-in -> the response cuts in and out. A lower
-    // start sensitivity plus a longer silence window make it robust to that
-    // echo without making the user's real speech hard to detect.
+    // Respects user-configured vadSensitivity with low/medium/high presets mirroring Android.
     realtimeInputConfig: {
-      automaticActivityDetection: {
-        startOfSpeechSensitivity: "START_SENSITIVITY_LOW",
-        endOfSpeechSensitivity: "END_SENSITIVITY_LOW",
-        prefixPaddingMs: 400,
-        silenceDurationMs: 900,
-      },
+      automaticActivityDetection: options.vadSensitivity === 'high'
+        ? {
+            startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
+            endOfSpeechSensitivity: "END_SENSITIVITY_HIGH",
+            prefixPaddingMs: 200,
+            silenceDurationMs: 500,
+          }
+        : options.vadSensitivity === 'low'
+        ? {
+            startOfSpeechSensitivity: "START_SENSITIVITY_LOW",
+            endOfSpeechSensitivity: "END_SENSITIVITY_LOW",
+            prefixPaddingMs: 400,
+            silenceDurationMs: 1200,
+          }
+        : {
+            startOfSpeechSensitivity: "START_SENSITIVITY_LOW",
+            endOfSpeechSensitivity: "END_SENSITIVITY_LOW",
+            prefixPaddingMs: 300,
+            silenceDurationMs: 800,
+          },
     },
   };
   if (typeof options.temperature === "number") config.temperature = options.temperature;
@@ -929,7 +940,7 @@ async function attachMicCapture(handle: SessionHandle, forceProcessor = false) {
     // the Interrupt button (or a typed message). When the user enables the
     // barge-in toggle, let the voice through so the server's VAD can cut the
     // AI off mid-sentence naturally.
-    if (handle.isSpeaking && handle.micMode === "handsFree" && !handle.bargeInEnabled) return;
+    if (handle.isSpeaking && !handle.bargeInEnabled) return;
     try {
       handle.session.sendRealtimeInput({
         audio: { data: base64, mimeType: "audio/pcm;rate=16000" },

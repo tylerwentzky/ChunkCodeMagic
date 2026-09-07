@@ -2,6 +2,8 @@ import { CharacterProfile, CodexEntry, InventoryItem, AppMode, VoiceSettings, ge
 import { getToneDirective, getMatureContentDirective, getAdultSafetySettings } from "./tone";
 import { sanitizeUserInput } from "./sanitize";
 import { recordRequest } from "../hooks/useApiUsageMonitor";
+import { buildDirectorPrompt } from "./voiceDirector";
+import { synthesizeSpeech } from "./ttsEngine";
 
 export { AppMode };
 export type { CharacterProfile, CodexEntry, InventoryItem, VoiceSettings };
@@ -2180,109 +2182,34 @@ RULES:
   return response.text?.trim() || input;
 }
 
-export async function generateSpeech(text: string, voiceName: string, voiceSettings: any, tone: string, useFastChain: boolean = false): Promise<string> {
+export async function generateSpeech(
+  text: string,
+  voiceName: string,
+  voiceSettings: any,
+  tone: string,
+  useFastChain: boolean = true
+): Promise<string> {
   if (!text || !text.trim()) return "";
-  const ai = getGenAI();
-
-  const accentNote = voiceSettings?.accent && voiceSettings.accent !== 'None'
-    ? ` Accent: ${voiceSettings.accent}.`
-    : '';
-
-  const prompt = `Perform this text as a cinematic audiobook narrator.
-Tone: ${tone || 'natural'}.
-Voice: ${voiceSettings?.pitch || 'Normal'} pitch, ${voiceSettings?.speed || 'Normal'} speed.${accentNote}
-Text: ${text.slice(0, 4000)}`;
-
-  const config = {
-    responseModalities: ["AUDIO" as const],
-    speechConfig: {
-      voiceConfig: {
-        prebuiltVoiceConfig: { voiceName: voiceName || 'Kore' },
-      },
-    },
-  };
-
-  // Valid Google Gemini TTS models
-  const TTS_MODEL_CHAIN = [
-    'gemini-3.1-flash-tts-preview',
-    'gemini-2.5-flash-preview-tts',
-    'gemini-2.5-pro-preview-tts',
-  ];
-  const TTS_MODEL_CHAIN_FAST = [
-    'gemini-3.1-flash-tts-preview',
-    'gemini-2.5-flash-preview-tts',
-    'gemini-2.5-pro-preview-tts',
-  ];
-
-  const chain = useFastChain ? TTS_MODEL_CHAIN_FAST : TTS_MODEL_CHAIN;
-
-  function isQuotaOrRateLimit(e: any): boolean {
-    const msg = (e?.message || String(e)).toLowerCase();
-    return msg.includes('429') || msg.includes('quota') || msg.includes('resource exhausted') || msg.includes('rate limit');
-  }
-  function isModelNotFound(e: any): boolean {
-    const msg = (e?.message || String(e)).toLowerCase();
-    return msg.includes('404') || msg.includes('not found') || msg.includes('deprecated');
-  }
-
-  let lastError: any = null;
-  const timeoutMs = (model: string): number => model.includes('pro') ? 12000 : model.includes('flash') ? 6000 : 5000;
-  const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T | null> => Promise.race([p, new Promise<null>(r => setTimeout(() => r(null), ms))]);
-  for (const model of chain) {
-    try {
-      console.log(`[generateSpeech] Attempting TTS with model: ${model}`);
-      const response = await withTimeout(ai.models.generateContent({
-        model,
-        contents: [{ role: 'user', parts: [{ text: prompt }] } as any],
-        config,
-      } as any) as Promise<any>, timeoutMs(model));
-      if (response == null) {
-        console.warn(`[generateSpeech] ${model} timed out after ${timeoutMs(model)}ms, trying next`);
-        continue;
-      }
-      const audioData = (response as any).candidates?.[0]?.content?.parts?.[0]?.inlineData?.data
-        ?? (response as any).candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData?.data)?.inlineData?.data;
-      if (audioData) {
-        console.log(`[generateSpeech] TTS succeeded: ${model}`);
-        return audioData;
-      }
-      console.warn(`[generateSpeech] ${model} returned no audio, trying next`);
-    } catch (error: any) {
-      console.warn(`[generateSpeech] ${model} failed (${error?.message}), trying next — quota=${isQuotaOrRateLimit(error)} notFound=${isModelNotFound(error)}`);
-      lastError = error;
-      continue;
-    }
-  }
-  throw lastError || new Error("All TTS models failed.");
+  const directorPrompt = buildDirectorPrompt(
+    voiceSettings?.characterName || 'Character',
+    voiceSettings?.voiceArchetype || 'Character',
+    '',
+    voiceSettings?.voiceStyle || tone || '',
+    voiceSettings?.voicePacing || '',
+    voiceSettings?.voiceAccent || voiceSettings?.accent || ''
+  );
+  const audio = await synthesizeSpeech(text, voiceName || 'Kore', directorPrompt, useFastChain);
+  return audio || "";
 }
 
 // Backwards-compatible wrapper for callers that expect stylePrefix usage (Director Prompt)
-export async function generateSpeechWithDirectorPrompt(text: string, voiceName?: string, stylePrefix?: string | null, useFastChain: boolean = false): Promise<string | null> {
-  const prompt = `${stylePrefix ? stylePrefix + '\n\n' : ''}${text.slice(0, 4000)}`;
-  const TTS_CHAIN = useFastChain ? [
-    'gemini-3.1-flash-tts-preview',
-    'gemini-2.5-flash-preview-tts',
-  ] : [
-    'gemini-3.1-flash-tts-preview',
-    'gemini-2.5-flash-preview-tts',
-    'gemini-2.5-pro-preview-tts',
-  ];
-  const ai = getGenAI();
-  const config = {
-    responseModalities: ["AUDIO" as const],
-    speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceName || 'Kore' } } },
-  };
-  const timeoutMs2 = (m: string): number => m.includes('pro') ? 12000 : m.includes('flash') ? 6000 : 5000;
-  const withTimeout2 = <T>(p: Promise<T>, ms: number): Promise<T | null> => Promise.race([p, new Promise<null>(r => setTimeout(() => r(null), ms))]);
-  for (const model of TTS_CHAIN) {
-    try {
-      const res: any = await withTimeout2(ai.models.generateContent({ model, contents: [{ role: 'user', parts: [{ text: prompt }] } as any], config } as any) as Promise<any>, timeoutMs2(model));
-      if (res == null) continue;
-      const b64 = res.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data ?? res.candidates?.[0]?.content?.parts?.find((p:any)=>p.inlineData?.data)?.inlineData?.data;
-      if (b64) return b64;
-    } catch { continue; }
-  }
-  return null;
+export async function generateSpeechWithDirectorPrompt(
+  text: string,
+  voiceName?: string,
+  stylePrefix?: string | null,
+  useFastChain: boolean = false
+): Promise<string | null> {
+  return synthesizeSpeech(text, voiceName, stylePrefix, useFastChain);
 }
 
 export async function extractCodexEntries(history: any[], profile: CharacterProfile, existingEntries: CodexEntry[]): Promise<Partial<CodexEntry>[]> {

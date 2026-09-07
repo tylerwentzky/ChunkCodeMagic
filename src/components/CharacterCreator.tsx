@@ -3,11 +3,11 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, Loader2, User, Image as ImageIcon, Globe, Heart, Swords, BookOpen, ArrowLeft, ArrowRight, Settings2, RotateCcw, Volume2 } from 'lucide-react';
 import { useToast } from '../hooks/useToast';
 import { getSmartSuggestions, generateCharacterProfile, generateAvatar, CharacterProfile, refineField, refineTraits, AppMode, refinePlayerProfile, InventoryItem, generateSpeech, refineText, refineProfile } from '../lib/gemini';
-import { ALL_VOICES, ROLEPLAY_VOICES, NARRATOR_VOICES, BRIGHT_VOICES } from '../lib/ttsEngine';
+import { ALL_VOICES, ROLEPLAY_VOICES, NARRATOR_VOICES, BRIGHT_VOICES, playPcmBase64 } from '../lib/ttsEngine';
 import { CharacterEditor } from './CharacterEditor';
 import { AdditionalCharacterModal } from './AdditionalCharacterModal';
 import { RefineButton } from './RefineButton';
-import { Scenario } from '../lib/types';
+import { Scenario, getSettings } from '../lib/types';
 
 import { SubjectMatters } from '../lib/subjectMatters';
 import { STORAGE_KEYS } from '../constants';
@@ -359,32 +359,15 @@ export function CharacterCreator({ onCharacterCreated, onCancel, scenarios = [] 
       const text = `Hello there! I am ${detailedProfile.name || 'your character'}. This is how my voice sounds.`;
       const base64Audio = await generateSpeech(text, detailedProfile.voiceName || 'Kore', detailedProfile.voiceSettings, detailedProfile.storyTone || 'Neutral');
       if (base64Audio) {
-        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const binaryString = window.atob(base64Audio);
-        const len = binaryString.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        
-        // Decode 16-bit PCM
-        const int16Array = new Int16Array(bytes.buffer);
-        const audioBuffer = ctx.createBuffer(1, int16Array.length, 24000);
-        const channelData = audioBuffer.getChannelData(0);
-        for (let i = 0; i < int16Array.length; i++) {
-          channelData[i] = int16Array[i] / 32768.0;
-        }
-
-        const source = ctx.createBufferSource();
-        source.buffer = audioBuffer;
-        source.connect(ctx.destination);
-        
-        source.onended = () => {
-          setIsPreviewingVoice(false);
-          ctx.close();
-        };
-        
-        source.start(0);
+        const settings = getSettings();
+        await playPcmBase64(
+          base64Audio,
+          () => setIsPreviewingVoice(false),
+          undefined,
+          settings.ttsSpeed ?? 1.0,
+          settings.liveVoiceOutputVolume ?? 1.0,
+          settings.liveVoicePitch ?? 1.0
+        );
       } else {
         setIsPreviewingVoice(false);
         toastError("Failed to generate voice preview");

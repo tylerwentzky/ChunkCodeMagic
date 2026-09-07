@@ -238,6 +238,8 @@ export interface AppSettings {
   liveVoiceOutputDeviceId?: string;
   liveVoiceOutputVolume?: number;
   liveVoiceBargeIn?: boolean;
+  liveVoiceMicMode?: 'hold' | 'toggle' | 'handsFree';
+  liveVoiceVadSensitivity?: 'low' | 'medium' | 'high';
   // Ported from Android AppSettings — voice chat mode & quality
   voiceMode?: 'live' | 'tts' | 'voice_chat';
   voiceQuality?: 'quality' | 'speed';
@@ -295,6 +297,8 @@ export const defaultSettings: AppSettings = {
   liveVoiceTemperature: 1.0,
   liveVoiceOutputVolume: 1,
   liveVoiceBargeIn: false,
+  liveVoiceMicMode: 'hold',
+  liveVoiceVadSensitivity: 'medium',
   voiceMode: 'live',
   voiceQuality: 'quality',
   ttsSpeed: 1.0,
@@ -358,6 +362,12 @@ export function getSettings(): AppSettings {
       }
       if (parsed.liveVoiceBargeIn === undefined) {
         parsed.liveVoiceBargeIn = false;
+      }
+      if (!parsed.liveVoiceMicMode) {
+        parsed.liveVoiceMicMode = 'hold';
+      }
+      if (!parsed.liveVoiceVadSensitivity) {
+        parsed.liveVoiceVadSensitivity = 'medium';
       }
       if (!parsed.voiceMode) {
         parsed.voiceMode = 'live';

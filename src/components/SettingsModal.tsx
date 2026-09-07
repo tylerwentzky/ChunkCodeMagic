@@ -453,6 +453,44 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     <p className="text-[11px] text-zinc-500">Auto-falls back through gemini-3.1-flash-live-preview → gemini-2.5-flash-native-audio-preview-12-2025 → gemini-2.5-flash-native-audio-preview-09-2025 on 429.</p>
                   </div>
 
+                  {/* Microphone Mode */}
+                  <div className="space-y-2 pt-1">
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs text-gray-300 font-medium">Microphone Mode</label>
+                      <span className="text-[10px] text-zinc-500">
+                        {settings.liveVoiceMicMode === 'handsFree'
+                          ? 'Open mic'
+                          : settings.liveVoiceMicMode === 'toggle'
+                          ? 'Tap to start/stop'
+                          : 'Press and hold'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { key: 'hold', label: 'Hold to Talk' },
+                        { key: 'toggle', label: 'Tap to Talk' },
+                        { key: 'handsFree', label: 'Hands-Free' },
+                      ].map(({ key, label }) => {
+                        const isSelected = (settings.liveVoiceMicMode || 'hold') === key;
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => handleChange('liveVoiceMicMode', key as any)}
+                            className={`py-2 text-xs font-semibold rounded-xl border transition-all ${
+                              isSelected
+                                ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                                : 'bg-white/[0.03] border-white/10 text-zinc-400 hover:text-white hover:bg-white/5'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Barge-In */}
                   <div className="flex items-center justify-between pt-1">
                     <div>
                       <label className="text-xs text-gray-300 font-medium">Barge-In (Allow Interruptions)</label>
@@ -463,6 +501,61 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       checked={settings.liveVoiceBargeIn ?? true}
                       onChange={(e) => handleChange('liveVoiceBargeIn', e.target.checked)}
                       className="accent-emerald-500 w-4 h-4 rounded cursor-pointer"
+                    />
+                  </div>
+
+                  {/* VAD Sensitivity */}
+                  <div className="space-y-2 pt-1">
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs text-gray-300 font-medium">Voice Activity Detection (VAD)</label>
+                      <span className="text-[10px] text-zinc-500">
+                        {settings.liveVoiceVadSensitivity === 'high'
+                          ? 'Fast cutoff (200ms pad)'
+                          : settings.liveVoiceVadSensitivity === 'low'
+                          ? 'Tolerates pauses (400ms pad)'
+                          : 'Balanced (300ms pad)'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { key: 'low', label: 'Low (Noisy)' },
+                        { key: 'medium', label: 'Default' },
+                        { key: 'high', label: 'High (Fast)' },
+                      ].map(({ key, label }) => {
+                        const isSelected = (settings.liveVoiceVadSensitivity || 'medium') === key;
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => handleChange('liveVoiceVadSensitivity', key as any)}
+                            className={`py-2 text-xs font-semibold rounded-xl border transition-all ${
+                              isSelected
+                                ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                                : 'bg-white/[0.03] border-white/10 text-zinc-400 hover:text-white hover:bg-white/5'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Voice Output Volume */}
+                  <div className="space-y-2 pt-1">
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs text-gray-300 font-medium">
+                        Voice Output Volume ({Math.round((settings.liveVoiceOutputVolume ?? 1.0) * 100)}%)
+                      </label>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.1"
+                      max="1.0"
+                      step="0.05"
+                      value={settings.liveVoiceOutputVolume ?? 1.0}
+                      onChange={(e) => handleChange('liveVoiceOutputVolume', parseFloat(e.target.value))}
+                      className="w-full accent-emerald-500"
                     />
                   </div>
 
