@@ -533,6 +533,39 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                 <p className="text-[11px] text-zinc-500">Controls narration and TTS playback rate.</p>
               </div>
 
+              {/* SECTION 3.6 — Voice Pitch */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-sm font-medium text-gray-200">Voice Pitch</label>
+                  <span className="text-xs text-emerald-400 font-mono">{(settings.liveVoicePitch ?? 1.0).toFixed(2)}x</span>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { pitch: 0.85, label: '0.85x Low' },
+                    { pitch: 1.0, label: '1.00x Normal' },
+                    { pitch: 1.15, label: '1.15x High' },
+                    { pitch: 1.3, label: '1.30x Sharp' },
+                  ].map(({ pitch, label }) => {
+                    const isSelected = (settings.liveVoicePitch ?? 1.0) === pitch;
+                    return (
+                      <button
+                        key={pitch}
+                        type="button"
+                        onClick={() => handleChange('liveVoicePitch', pitch)}
+                        className={`py-2 text-xs font-semibold rounded-xl border transition-all ${
+                          isSelected
+                            ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                            : 'bg-white/[0.03] border-white/10 text-zinc-400 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[11px] text-zinc-500">Controls voice pitch for Live Voice and narration audio.</p>
+              </div>
+
               {/* SECTION 4 — Voice Picker — 30 Gemini Voices (always visible) */}
               <div className="space-y-3">
                 <label className="text-sm font-medium text-gray-200">Voice Picker — 30 Gemini Voices</label>

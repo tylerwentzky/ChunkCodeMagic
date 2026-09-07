@@ -2,7 +2,7 @@
 export function buildDirectorPrompt(
   characterName: string,
   characterArchetype: string,
-  sceneContext: string,
+  _sceneContext: string,
   style: string,
   pacing: string,
   accent: string,
@@ -16,7 +16,6 @@ export function buildDirectorPrompt(
   if (style && style.trim()) notes.push(`style: ${style.trim()}`);
   if (pacing && pacing.trim()) notes.push(`pacing: ${pacing.trim()}`);
   if (accent && accent.trim()) notes.push(`accent: ${accent.trim()}`);
-  if (sceneContext && sceneContext.trim()) notes.push(`scene: ${sceneContext.trim().slice(0, 150)}`);
   if (notes.length > 0) {
     header += ` [${notes.join(', ')}]`;
   }

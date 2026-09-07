@@ -228,7 +228,8 @@ export async function playPcmBase64(
   onDone?: () => void,
   signal?: { cancelled: boolean },
   speed: number = 1,
-  volume: number = 1
+  volume: number = 1,
+  pitch: number = 1
 ): Promise<AudioBufferSourceNode | null> {
   if (!b64) return null;
   try {
@@ -250,6 +251,11 @@ export async function playPcmBase64(
     src.buffer = buffer;
     if (speed && speed > 0) {
       src.playbackRate.value = Math.max(0.25, Math.min(3.0, speed));
+    }
+    if (pitch && pitch > 0 && pitch !== 1) {
+      try {
+        src.detune.value = Math.round(1200 * Math.log2(Math.max(0.25, Math.min(3.0, pitch))));
+      } catch (_) {}
     }
 
     const gainNode = ctx.createGain();
@@ -455,7 +461,7 @@ export class TtsEngine {
     return synthesizeSpeech(text, voiceName, stylePrefix, useFastChain);
   }
 
-  async playBase64(b64: string, onDone?: () => void, speed?: number, volume?: number): Promise<void> {
+  async playBase64(b64: string, onDone?: () => void, speed?: number, volume?: number, pitch?: number): Promise<void> {
     this.stop();
     this.cancelFlag = { cancelled: false };
     this.setSpeaking(true);
@@ -463,12 +469,13 @@ export class TtsEngine {
       const settings = getSettings();
       const effSpeed = speed ?? settings.ttsSpeed ?? 1.0;
       const effVol = volume ?? settings.liveVoiceOutputVolume ?? 1.0;
+      const effPitch = pitch ?? settings.liveVoicePitch ?? 1.0;
       const src = await playPcmBase64(b64, () => {
         if (!this.cancelFlag.cancelled) {
           this.setSpeaking(false);
           onDone?.();
         }
-      }, this.cancelFlag, effSpeed, effVol);
+      }, this.cancelFlag, effSpeed, effVol, effPitch);
       this.currentSource = src;
       if (!src) {
         this.setSpeaking(false);
@@ -533,10 +540,11 @@ export class TtsEngine {
         const settings = getSettings();
         const speed = settings.ttsSpeed ?? 1.0;
         const volume = settings.liveVoiceOutputVolume ?? 1.0;
+        const pitch = settings.liveVoicePitch ?? 1.0;
         await new Promise<void>((resolve) => {
           this.playBase64(b64, () => {
             resolve();
-          }, speed, volume);
+          }, speed, volume, pitch);
         });
       } else {
         // Fallback to browser TTS for this segment with proper end-event listening
@@ -590,7 +598,8 @@ export class TtsEngine {
       const settings = getSettings();
       const speed = settings.ttsSpeed ?? 1.0;
       const volume = settings.liveVoiceOutputVolume ?? 1.0;
-      await this.playBase64(b64, onDone, speed, volume);
+      const pitch = settings.liveVoicePitch ?? 1.0;
+      await this.playBase64(b64, onDone, speed, volume, pitch);
     } else {
       // browser fallback using speakWithBrowserAsync to prevent premature cutoff
       const settings = getSettings();

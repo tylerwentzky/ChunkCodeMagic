@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { sanitizeUserInput } from "./sanitize";
 import { defaultTtsEngine } from "./ttsEngine";
+import { getSettings } from "./types";
 
 export const LIVE_MODEL_CHAIN = [
   "gemini-3.1-flash-live-preview",
@@ -615,6 +616,18 @@ function _scheduleAudioChunk(handle: SessionHandle, ctx: AudioContext, base64: s
   const source = ctx.createBufferSource();
   source.buffer = buffer;
 
+  const settings = getSettings();
+  const speed = settings.ttsSpeed ?? 1.0;
+  const pitch = settings.liveVoicePitch ?? 1.0;
+  if (speed && speed > 0 && speed !== 1.0) {
+    source.playbackRate.value = Math.max(0.25, Math.min(3.0, speed));
+  }
+  if (pitch && pitch > 0 && pitch !== 1.0) {
+    try {
+      source.detune.value = Math.round(1200 * Math.log2(Math.max(0.25, Math.min(3.0, pitch))));
+    } catch (_) {}
+  }
+
   if (handle.outputGainNode) {
     source.connect(handle.outputGainNode);
   } else {
@@ -627,7 +640,8 @@ function _scheduleAudioChunk(handle: SessionHandle, ctx: AudioContext, base64: s
     console.warn("Failed to schedule live audio chunk:", e);
     return;
   }
-  handle.nextPlaybackTime = startTime + buffer.duration;
+  const effectiveDuration = buffer.duration / (source.playbackRate.value || 1);
+  handle.nextPlaybackTime = startTime + effectiveDuration;
   handle.playbackQueue.push(source);
   handle.isSpeaking = true;
   emitState(handle);
