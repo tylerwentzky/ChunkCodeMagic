@@ -76,7 +76,7 @@ export function VoiceChatDialog({ isOpen, onClose, profile, storySummary, messag
 
   const launchSTT = useCallback(() => {
     if (!isMountedRef.current) return;
-    if (phaseRef.current === 'speaking' || ttsRef.current?.isSpeaking) return;
+    if (phaseRef.current === 'speaking' || phaseRef.current === 'listening' || ttsRef.current?.isSpeaking) return;
     const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) {
       if (isMountedRef.current) {
