@@ -125,6 +125,8 @@ export function cleanTextForSpeech(text: string): string {
     .replace(/\[Director's Note(?: for AI)?: [\s\S]*?\]/gi, '')
     .replace(/\[(?:Action|Roll|Director|Dice|Context|OOC|Narrator).*?\]/gis, '')
     .replace(/<\/?[a-zA-Z][^>]*>/gi, '')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`([^`]+)`/g, '$1')
     .replace(/(?:^|\n)>\s*/g, '$1')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .replace(/[*_~`#]/g, '')
@@ -221,7 +223,13 @@ export function base64ToPcmBytes(b64: string): Uint8Array {
   return base64ToBytes(b64);
 }
 
-export async function playPcmBase64(b64: string, onDone?: () => void, signal?: { cancelled: boolean }): Promise<AudioBufferSourceNode | null> {
+export async function playPcmBase64(
+  b64: string,
+  onDone?: () => void,
+  signal?: { cancelled: boolean },
+  speed: number = 1,
+  volume: number = 1
+): Promise<AudioBufferSourceNode | null> {
   if (!b64) return null;
   try {
     const bytes = base64ToBytes(b64);
@@ -240,7 +248,15 @@ export async function playPcmBase64(b64: string, onDone?: () => void, signal?: {
 
     const src = ctx.createBufferSource();
     src.buffer = buffer;
-    src.connect(ctx.destination);
+    if (speed && speed > 0) {
+      src.playbackRate.value = Math.max(0.25, Math.min(3.0, speed));
+    }
+
+    const gainNode = ctx.createGain();
+    gainNode.gain.value = Math.max(0, Math.min(1, volume));
+    src.connect(gainNode);
+    gainNode.connect(ctx.destination);
+
     src.onended = () => { if (!signal?.cancelled) onDone?.(); };
     src.start();
     return src;
@@ -341,11 +357,19 @@ export async function synthesizeSpeech(
   }
 
   const ai = getGenAI();
-  const chain = useFastChain ? TTS_MODEL_CHAIN_FAST : TTS_MODEL_CHAIN;
+  const settings = getSettings();
+  const preferredModel = settings.activeTTSModel;
+  let chain: readonly string[] = useFastChain ? TTS_MODEL_CHAIN_FAST : TTS_MODEL_CHAIN;
+  if (preferredModel && !chain.includes(preferredModel as any)) {
+    chain = [preferredModel, ...chain];
+  } else if (preferredModel && chain[0] !== preferredModel) {
+    chain = [preferredModel, ...chain.filter((m) => m !== preferredModel)];
+  }
+
   const prompt = stylePrefix
     ? (stylePrefix.includes('### TRANSCRIPT')
         ? stylePrefix.slice(0, 4000)
-        : `${stylePrefix}\n\n${text.slice(0, 4000)}`)
+        : `${stylePrefix}:\n\n${text.slice(0, 4000)}`)
     : text.slice(0, 4000);
 
   const configBase = {
@@ -431,17 +455,20 @@ export class TtsEngine {
     return synthesizeSpeech(text, voiceName, stylePrefix, useFastChain);
   }
 
-  async playBase64(b64: string, onDone?: () => void): Promise<void> {
+  async playBase64(b64: string, onDone?: () => void, speed?: number, volume?: number): Promise<void> {
     this.stop();
     this.cancelFlag = { cancelled: false };
     this.setSpeaking(true);
     try {
+      const settings = getSettings();
+      const effSpeed = speed ?? settings.ttsSpeed ?? 1.0;
+      const effVol = volume ?? settings.liveVoiceOutputVolume ?? 1.0;
       const src = await playPcmBase64(b64, () => {
         if (!this.cancelFlag.cancelled) {
           this.setSpeaking(false);
           onDone?.();
         }
-      }, this.cancelFlag);
+      }, this.cancelFlag, effSpeed, effVol);
       this.currentSource = src;
       if (!src) {
         this.setSpeaking(false);
@@ -503,15 +530,18 @@ export class TtsEngine {
       if (myCancel.cancelled) break;
 
       if (b64) {
+        const settings = getSettings();
+        const speed = settings.ttsSpeed ?? 1.0;
+        const volume = settings.liveVoiceOutputVolume ?? 1.0;
         await new Promise<void>((resolve) => {
           this.playBase64(b64, () => {
             resolve();
-          });
+          }, speed, volume);
         });
       } else {
         // Fallback to browser TTS for this segment with proper end-event listening
         const settings = getSettings();
-        const rate = (settings as any)?.ttsSpeed ?? 1;
+        const rate = settings.ttsSpeed ?? 1.0;
         await speakWithBrowserAsync(segments[i], options.voiceName, rate);
       }
     }
@@ -557,11 +587,14 @@ export class TtsEngine {
       30000
     )) as string | null;
     if (b64) {
-      await this.playBase64(b64, onDone);
+      const settings = getSettings();
+      const speed = settings.ttsSpeed ?? 1.0;
+      const volume = settings.liveVoiceOutputVolume ?? 1.0;
+      await this.playBase64(b64, onDone, speed, volume);
     } else {
       // browser fallback using speakWithBrowserAsync to prevent premature cutoff
       const settings = getSettings();
-      const rate = (settings as any)?.ttsSpeed ?? 1;
+      const rate = settings.ttsSpeed ?? 1.0;
       this.setSpeaking(true);
       await speakWithBrowserAsync(clean, voiceName, rate);
       this.setSpeaking(false);

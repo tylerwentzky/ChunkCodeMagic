@@ -6,23 +6,21 @@ export function buildDirectorPrompt(
   style: string,
   pacing: string,
   accent: string,
-  transcript: string
+  _transcript?: string
 ): string {
-  const lines: string[] = [];
-  lines.push(`# AUDIO PROFILE: ${characterName}`);
-  lines.push(`## "${characterArchetype}"`);
-  lines.push('');
-  lines.push('## THE SCENE');
-  lines.push(sceneContext);
-  lines.push('');
-  lines.push("### DIRECTOR'S NOTES");
-  if (style) lines.push(`Style: ${style}`);
-  if (pacing) lines.push(`Pacing: ${pacing}`);
-  if (accent) lines.push(`Accent: ${accent}`);
-  lines.push('');
-  lines.push('### TRANSCRIPT');
-  lines.push(transcript);
-  return lines.join('\n');
+  let header = `Speak as ${characterName}`;
+  if (characterArchetype && characterArchetype.trim()) {
+    header += ` (${characterArchetype.trim()})`;
+  }
+  const notes: string[] = [];
+  if (style && style.trim()) notes.push(`style: ${style.trim()}`);
+  if (pacing && pacing.trim()) notes.push(`pacing: ${pacing.trim()}`);
+  if (accent && accent.trim()) notes.push(`accent: ${accent.trim()}`);
+  if (sceneContext && sceneContext.trim()) notes.push(`scene: ${sceneContext.trim().slice(0, 150)}`);
+  if (notes.length > 0) {
+    header += ` [${notes.join(', ')}]`;
+  }
+  return header;
 }
 
 import type { CharacterProfile } from './types';
@@ -31,11 +29,11 @@ export function buildDirectorPromptFromProfile(
   profile: CharacterProfile,
   storySummary: string,
   backstory: string | undefined,
-  transcript: string
+  _transcript?: string
 ): string | undefined {
   const hasVoiceProfile = !!(profile.voiceArchetype || profile.voiceStyle || profile.voicePacing || profile.voiceAccent);
   if (!hasVoiceProfile) return undefined;
-  const sceneContext = storySummary?.slice(-200) || backstory?.slice(0, 200) || '';
+  const sceneContext = storySummary?.slice(-150) || backstory?.slice(0, 150) || '';
   return buildDirectorPrompt(
     profile.name || 'Character',
     profile.voiceArchetype || profile.name || 'Character',
@@ -43,6 +41,6 @@ export function buildDirectorPromptFromProfile(
     profile.voiceStyle || '',
     profile.voicePacing || '',
     profile.voiceAccent || '',
-    transcript
+    _transcript
   );
 }

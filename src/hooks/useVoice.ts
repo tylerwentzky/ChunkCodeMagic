@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { defaultTtsEngine, splitIntoSpeechSegments } from '../lib/ttsEngine';
 import { buildDirectorPromptFromProfile } from '../lib/voiceDirector';
+import { interruptAiSpeech, isLiveVoiceSpeaking } from '../lib/liveVoice';
 import { getSettings } from '../lib/types';
 import type { CharacterProfile, VoiceSettings } from '../lib/types';
 
@@ -38,6 +39,9 @@ export function useVoice(voiceName: string, _voiceSettings?: VoiceSettings, _sto
       // Stop anything currently playing
       defaultTtsEngine.stop();
       try { window.speechSynthesis.cancel(); } catch {}
+      if (isLiveVoiceSpeaking()) {
+        interruptAiSpeech();
+      }
 
       const segments = splitIntoSpeechSegments(text);
       if (segments.length === 0) return;

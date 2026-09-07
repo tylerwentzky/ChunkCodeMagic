@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { sanitizeUserInput } from "./sanitize";
+import { defaultTtsEngine } from "./ttsEngine";
 
 export const LIVE_MODEL_CHAIN = [
   "gemini-3.1-flash-live-preview",
@@ -549,7 +550,6 @@ function resampleAudio(input: Float32Array, fromRate: number, toRate: number): F
 const TARGET_PLAYBACK_LATENCY = 0.22;
 
 function enqueuePcmAudio(handle: SessionHandle, base64: string) {
-  handle.currentTurnAudioChunks.push(base64);
   const ctx = setupAudioPlayback(handle);
 
   if (ctx.state !== "running") {
@@ -1176,11 +1176,11 @@ async function connectSession(
         }
 
         if (handle.turnCancelled) {
-          // User triggered "Interrupt AI" — drop incoming server model chunks
-          // for the cancelled turn so the AI does not start speaking again.
+          // Interrupt during playback: drop stale model chunks.
         } else if (content.modelTurn?.parts) {
           for (const part of content.modelTurn.parts) {
             if (part.inlineData?.data) {
+              handle.currentTurnAudioChunks.push(part.inlineData.data);
               if (!handle.isAiMuted) {
                 enqueuePcmAudio(handle, part.inlineData.data);
               }
@@ -1339,7 +1339,7 @@ async function reconnectNow(): Promise<void> {
     if (turn.user) inCallTurns.push({ role: "user", text: turn.user });
     if (turn.model) inCallTurns.push({ role: "model", text: turn.model });
   }
-  let combinedTurns = [...(options.contextTurns || []), ...inCallTurns].slice(-80);
+  let combinedTurns = [...(options.contextTurns || []), ...inCallTurns].slice(-50);
 
   // #9: Secondary guard — trim oldest turns until total character count is under 15,000
   // to prevent oversized reconnect payloads that can cause 400/413 errors.
@@ -1405,6 +1405,10 @@ async function reconnectNow(): Promise<void> {
         // Preserve the conversation record so future reconnects keep merging
         // correctly instead of replaying from the original snapshot again.
         handle.turnHistory = [...stale.turnHistory];
+        handle.lastCompletedAudioChunks = stale.lastCompletedAudioChunks ? [...stale.lastCompletedAudioChunks] : [];
+        handle.lastCompletedModelText = stale.lastCompletedModelText || "";
+        handle.isInterrupted = stale.isInterrupted ?? false;
+        handle.lastInterruptedStatement = stale.lastInterruptedStatement || "";
       }
       try {
         await attachMicCapture(handle);
@@ -1694,11 +1698,20 @@ export function rewindLiveVoice(onRewind?: () => void): void {
   active.options?.onModelTranscript?.("", false);
   emitState(active);
   onRewind?.();
+  reconnectAttempts = 0;
+  reconnectNow().catch(() => scheduleReconnect());
+}
+
+/**
+ * Check if Live Voice is currently speaking audio
+ */
+export function isLiveVoiceSpeaking(): boolean {
+  return !!active?.isSpeaking;
 }
 
 /**
  * Repeat / Replay: Replays the AI's last completed response.
- * Plays cached audio chunks if available, or requests the model to repeat itself.
+ * Plays cached audio chunks if available, or speaks text via TTS engine directly.
  */
 export function replayLastStatement(): boolean {
   if (!active) return false;
@@ -1712,8 +1725,8 @@ export function replayLastStatement(): boolean {
     }
     return true;
   } else if (active.lastCompletedModelText) {
-    sendTextMessage(`Please repeat what you just said: "${active.lastCompletedModelText}"`);
-    forceSendTurn();
+    // Client-side TTS replay guarantees exact speech without server hallucination or chat pollution
+    defaultTtsEngine.speak(active.lastCompletedModelText, active.options?.voiceName);
     return true;
   }
   return false;
@@ -1734,11 +1747,10 @@ export function recoverInterruptedStatement(restart = false): boolean {
   active.lastInterruptedStatement = "";
   emitState(active);
   sendTextMessage(prompt);
-  forceSendTurn();
   return true;
 }
 
-export function sendTextMessage(text: string): void {
+export function sendTextMessage(text: string, turnComplete = true): void {
   if (!active?.session) return;
   const trimmed = text.trim();
   if (!trimmed) return;
@@ -1752,6 +1764,9 @@ export function sendTextMessage(text: string): void {
   // sendRealtimeInput. sendClientContent mid-conversation is documented as
   // seed-only for that model and returns a text-only reply instead of speech.
   active.session.sendRealtimeInput({ text: trimmed });
+  if (turnComplete) {
+    forceSendTurn();
+  }
 }
 
 export function stopLiveVoice(): void {
@@ -1773,6 +1788,10 @@ export function stopLiveVoice(): void {
  */
 export function forceSendTurn(): void {
   if (!active) return;
+  if (active.isSpeaking) {
+    interruptAiSpeech();
+    active.turnCancelled = false;
+  }
   // Stop mic so we don't keep streaming while Gemini is generating
   active.pushToTalk = false;
   syncMicSendingState(active);

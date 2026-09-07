@@ -505,6 +505,34 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                 </div>
               )}
 
+              {/* SECTION 3.5 — Speech Speed / Rate */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-sm font-medium text-gray-200">Speech Speed</label>
+                  <span className="text-xs text-emerald-400 font-mono">{(settings.ttsSpeed ?? 1.0).toFixed(2)}x</span>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {[0.75, 1.0, 1.25, 1.5].map((rate) => {
+                    const isSelected = (settings.ttsSpeed ?? 1.0) === rate;
+                    return (
+                      <button
+                        key={rate}
+                        type="button"
+                        onClick={() => handleChange('ttsSpeed', rate)}
+                        className={`py-2 text-xs font-semibold rounded-xl border transition-all ${
+                          isSelected
+                            ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                            : 'bg-white/[0.03] border-white/10 text-zinc-400 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        {rate}x
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[11px] text-zinc-500">Controls narration and TTS playback rate.</p>
+              </div>
+
               {/* SECTION 4 — Voice Picker — 30 Gemini Voices (always visible) */}
               <div className="space-y-3">
                 <label className="text-sm font-medium text-gray-200">Voice Picker — 30 Gemini Voices</label>

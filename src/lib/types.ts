@@ -241,6 +241,8 @@ export interface AppSettings {
   // Ported from Android AppSettings — voice chat mode & quality
   voiceMode?: 'live' | 'tts' | 'voice_chat';
   voiceQuality?: 'quality' | 'speed';
+  ttsSpeed?: number;
+  liveVoicePitch?: number;
   themeAccent?: ThemeAccent;
   fontFamily?: FontFamilyOption;
   chatDensity?: ChatDensityOption;
@@ -295,6 +297,8 @@ export const defaultSettings: AppSettings = {
   liveVoiceBargeIn: false,
   voiceMode: 'live',
   voiceQuality: 'quality',
+  ttsSpeed: 1.0,
+  liveVoicePitch: 1.0,
   themeAccent: 'emerald',
   fontFamily: 'sans',
   chatDensity: 'comfy',
@@ -360,6 +364,12 @@ export function getSettings(): AppSettings {
       }
       if (!parsed.voiceQuality) {
         parsed.voiceQuality = 'quality';
+      }
+      if (parsed.ttsSpeed === undefined) {
+        parsed.ttsSpeed = 1.0;
+      }
+      if (parsed.liveVoicePitch === undefined) {
+        parsed.liveVoicePitch = 1.0;
       }
       if (!parsed.themeAccent) {
         parsed.themeAccent = 'emerald';
